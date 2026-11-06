@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sopralluoghi</title>
+<meta name="theme-color" content="#1B2125">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icona-192.png">
+<link rel="apple-touch-icon" href="icona-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sopralluoghi">
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: una colonna da telefono, intestazione fissa, sezioni della pratica una sotto l'altra */
+:root{
+  --bg:#EDEFF0; --surface:#FFFFFF; --ink:#1B2125; --muted:#5B656C; --line:#D2D7DA;
+  --accent:#E0AE12; --accent-ink:#1B2125; --soft:#F6F0DA;
+  --ok:#2C7A4B; --warn:#B4531A; --danger:#B3261E;
+  --f-display:"Barlow Semi Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#13171A; --surface:#1D2327; --ink:#E7EBED; --muted:#9BA6AD; --line:#323B41;
+  --accent:#F1C232; --accent-ink:#13171A; --soft:#2B2716;
+  --ok:#5DC88B; --warn:#F09658; --danger:#F2827A; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#13171A; --surface:#1D2327; --ink:#E7EBED; --muted:#9BA6AD; --line:#323B41;
+  --accent:#F1C232; --accent-ink:#13171A; --soft:#2B2716;
+  --ok:#5DC88B; --warn:#F09658; --danger:#F2827A; color-scheme:dark }
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header .wrap{display:flex;align-items:center;gap:12px;padding-block:10px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:22px;letter-spacing:.01em}
+h2{font-size:19px}
+h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.tag{font-size:12px;color:var(--muted);margin-left:auto;text-align:right}
+main.wrap{padding-block:16px 48px;display:grid;gap:16px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:12px;min-width:0}
+.mono{font-family:var(--f-mono);font-size:14px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+button,.btn{font:600 15px var(--f-body);border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 14px;cursor:pointer;min-height:44px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label.btn:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.danger{color:var(--danger);border-color:var(--danger)}
+.danger.solid{background:var(--danger);color:#fff}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row > *{min-width:0}
+.grow{flex:1 1 160px}
+.list{display:grid;gap:10px}
+.card{display:grid;gap:4px;text-align:left;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+.card .nome{font-family:var(--f-mono);font-size:14px;word-break:break-word}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;border:1px solid currentColor}
+.p-ok{color:var(--ok)} .p-warn{color:var(--warn)} .p-mute{color:var(--muted)}
+label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:500}
+input[type=text],input[type=number],input[type=search],input[type=email],input[type=password],select,textarea{font:16px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%;min-width:0;box-sizing:border-box}
+textarea{min-height:120px;resize:vertical}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:420px){.grid2{grid-template-columns:1fr}}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{min-height:40px;padding:8px 12px;font-weight:500}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.sino{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.sino:last-child{border-bottom:0}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-width:56px;min-height:40px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.chk{display:flex;gap:10px;align-items:center;padding:6px 0}
+.chk input{width:24px;height:24px;flex:none;accent-color:var(--ok)}
+.chk.fatto span{text-decoration:line-through;color:var(--muted)}
+.frase{background:var(--soft);border-radius:8px;padding:12px;font-size:15px;white-space:pre-wrap;word-break:break-word}
+.fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px}
+.fotos figure{margin:0;position:relative}
+.fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;display:block;background:var(--line)}
+.fotos figcaption{font-size:11px;color:var(--muted);font-family:var(--f-mono)}
+.fotos button{position:absolute;top:4px;right:4px;min-height:28px;padding:2px 8px;font-size:12px;opacity:.9}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);width:0}
+.avviso{border-left:4px solid var(--warn);padding:10px 12px;background:var(--surface);border-radius:6px}
+.esempio{font-size:12px;font-weight:600;color:var(--warn)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:8px;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+.back{min-height:40px;padding:6px 10px}
+input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
+#editor{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.edBand{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.edTop{display:flex;align-items:center;gap:10px;padding-block:8px;background:var(--surface);border-bottom:1px solid var(--line)}
+.edTit{display:grid;min-width:0;flex:1}.edTit .mono{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.edLiv{display:flex;gap:6px;overflow-x:auto;padding-block:6px;background:var(--surface);border-bottom:1px solid var(--line)}
+.tab{min-height:36px;padding:6px 12px;white-space:nowrap;font-weight:500}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.edTela{flex:1;position:relative;min-height:0;overflow:hidden}
+#tela{display:block;touch-action:none;width:100%;height:100%}
+.edCx{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-height:52px;padding-block:6px;background:var(--surface);border-top:1px solid var(--line)}
+.edCx button{min-height:40px;padding:6px 12px}
+.edTools{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding-block:6px 8px;background:var(--surface);border-top:1px solid var(--line)}
+.edTools button{display:grid;justify-items:center;gap:2px;padding:6px 2px;min-height:54px;font-size:11px;font-weight:600;border-color:transparent;background:transparent}
+.edTools button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.edTools button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.edTools button:disabled{opacity:.35}
+.foglio{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);border-radius:12px 12px 0 0;padding-block:14px 16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.18);max-height:75%;overflow:auto}
+#editor[hidden],.foglio[hidden]{display:none!important}
+.box p{margin:0}
+label.btn{display:flex;align-items:center;justify-content:center;position:relative}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* aggiunte della versione vera */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+.statoPill{background:var(--surface);cursor:pointer;min-height:28px;padding:3px 10px;font:600 12px var(--f-body);margin-top:4px}
+.p-danger{color:var(--danger)}
+.link{background:none;border:0;color:var(--muted);text-decoration:underline;min-height:36px;padding:4px 0;justify-self:start;font-weight:500}
+.fotos .ph{aspect-ratio:1;display:grid;place-items:center;text-align:center;border-radius:6px;background:var(--line);padding:4px}
+.tag .chi{display:block;max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <button class="back" id="btnIndietro" hidden>← Pratiche</button>
+  <h1 id="titolo">Sopralluoghi</h1>
+  <div class="tag"><span class="chi" id="chi"></span><button type="button" class="pill statoPill" id="stato" hidden></button></div>
+</div></header>
+<main class="wrap" id="app"><div class="box"><p>Carico la pagina…</p></div></main>
+<div class="toast" id="toast" hidden role="status"></div>
+<div id="editor" hidden role="dialog" aria-label="Schizzo del rilievo">
+  <div class="edTop edBand"><button class="primary" id="edFine">Fine</button><div class="edTit"><span class="mono small" id="edTitolo"></span><span class="small muted" id="edScala"></span></div><button id="edAdatta">Adatta</button></div>
+  <div class="edLiv edBand" id="edLivelli"></div>
+  <div class="edTela"><canvas id="tela"></canvas><div id="edFoglio" class="foglio" hidden></div></div>
+  <div class="edCx edBand" id="edContesto"></div>
+  <div class="edTools edBand" id="edStrumenti">
+    <button type="button" data-tool="sel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3l12 9-5.5 1.2L15 19l-2.4 1.2-2.6-5.8L6 18z"/></svg>Scegli</button>
+    <button type="button" data-tool="stanza"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14"/></svg>Stanza</button>
+    <button type="button" data-tool="balcone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="9"/><path d="M8 17l5-9M13 17l5-9M4 13l3-5"/></svg>Balcone</button>
+    <button type="button" data-tool="scala"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16"/><path d="M5 8h14M5 12h14M5 16h14"/></svg>Scala</button>
+    <button type="button" data-tool="porta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M6 20V8"/><path d="M6 8a12 12 0 0 1 12 12" stroke-dasharray="2 2.5"/></svg>Porta</button>
+    <button type="button" data-tool="quota"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M3 8v8M21 8v8"/></svg>Quota</button>
+    <button type="button" id="edAnnulla" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Annulla</button>
+  </div>
+</div>
+
+<script src="lib/supabase.js"></script>
+<script src="lib/pdf.min.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script src="lib/exifr.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

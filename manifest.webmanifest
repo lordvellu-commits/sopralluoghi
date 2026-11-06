@@ -1,0 +1,14 @@
+{
+  "name": "Sopralluoghi",
+  "short_name": "Sopralluoghi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EDEFF0",
+  "theme_color": "#1B2125",
+  "lang": "it",
+  "icons": [
+    { "src": "icona-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
