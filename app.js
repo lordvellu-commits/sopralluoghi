@@ -87,14 +87,20 @@ function salvaDopo(p){p.aggiornata=Date.now();p.daInviare=true;inSospeso=p;clear
 function salvaSubito(){if(inSospeso){clearTimeout(salvaTimer);const p=inSospeso;inSospeso=null;return salvaPratica(p).then(()=>programmaSync(800))}return Promise.resolve()}
 
 /* ---------- lettura della scheda ---------- */
+/* rimette insieme le righe di testo: i pezzi attaccati restano attaccati, quelli staccati prendono uno spazio */
+function ricomponi(arr){const rows=[];[...arr].sort((a,b)=>b.y-a.y||a.x-b.x).forEach(i=>{const r=rows.find(r=>Math.abs(r.y-i.y)<3);r?r.p.push(i):rows.push({y:i.y,p:[i]})});
+  return rows.map(r=>{r.p.sort((a,b)=>a.x-b.x);let out="",fine=null;for(const i of r.p){if(fine!=null&&(!i.w&&!r.p[0].w?true:i.x-fine>1.2))out+=" ";out+=i.s;fine=i.x+(i.w||0)}return out.replace(/\s+/g," ").trim()}).filter(Boolean)}
+/* codice perizia.ABI: tollera spazi o virgola al posto del punto e numeri attaccati davanti (es. il telefono) */
+function trovaNumero(testi){for(const t of testi){const re=/(\d{6,})\s*[.,]\s*(\d{5})(?!\d)/g;let m;
+  while((m=re.exec(t))){const a=m[1].length>9?m[1].slice(-9):m[1];return a+"."+m[2]}}return""}
 function leggiScheda(items){
-  const it=items.filter(i=>i.s.trim()).map(i=>({s:i.s.trim(),x:i.x,y:i.y}));
+  const it=items.map(i=>({s:String(i.s).replace(/[\u200b-\u200d\ufeff]/g,"").replace(/\u00a0/g," "),x:i.x,y:i.y,w:i.w||0})).filter(i=>i.s.trim()).map(i=>({...i,s:i.s.trim()}));
   const find=re=>it.find(i=>re.test(i.s));
   const sotto=(lab,dx,dy)=>!lab?[]:it.filter(i=>i!==lab&&i.y<lab.y-1&&i.y>lab.y-dy&&i.x>lab.x-6&&i.x<lab.x+dx).sort((a,b)=>b.y-a.y||a.x-b.x);
   const cli=find(/^CLIENTE$/),tipo=find(/^TIPO OPERAZIONE/),ind=find(/^INDIRIZZO$/);
   const box=cli?it.filter(i=>i.y<cli.y-1&&(!tipo||i.y>tipo.y)&&i.x<(ind?ind.x-5:9999)).sort((a,b)=>b.y-a.y||a.x-b.x):[];
-  const tutto=it.map(i=>i.s).join(" ");
-  const num=(box.map(i=>i.s).join("\n").match(/\b\d{6,}\.\d{5}\b/)||tutto.match(/\b\d{6,}\.\d{5}\b/)||[""])[0];
+  const righeBox=ricomponi(box);
+  const num=trovaNumero([...righeBox,righeBox.join(""),...ricomponi(it)]);
   const indir=ind?it.filter(i=>i.y<ind.y-1&&(!tipo||i.y>tipo.y)&&i.x>ind.x-6).sort((a,b)=>b.y-a.y||a.x-b.x).map(i=>i.s).join(", "):"";
   const dl=find(/^SOPRALLUOGO/);
   const data=((sotto(dl,160,40).map(i=>i.s).find(s=>/\d{2}\/\d{2}\/\d{4}/.test(s))||"").match(/\d{2}\/\d{2}\/\d{4}/)||[""])[0];
@@ -107,14 +113,14 @@ function leggiScheda(items){
     m[1].split(/,|\+|;|\/|\be\b/).map(s=>s.trim().replace(/[.\s]+$/,"")).filter(s=>s&&s===s.toUpperCase()&&/[A-Z]/.test(s)).forEach(s=>{if(!mancanti.includes(s))mancanti.push(s)});
   }
   const chk=find(/^CHECK LIST/);
-  return {num,richiedente:box.length?box[0].s:"",indirizzo:indir,data,vt,mancanti,planCat:/PLAN\.?\s*CAT/.test(testo),anc:{chk:chk?chk.y:null,vt:vl?vl.y:null}};
+  return {num,richiedente:righeBox.find(r=>/[A-Za-zÀ-ÿ]{2}/.test(r))||"",indirizzo:indir,data,vt,mancanti,planCat:/PLAN\.?\s*CAT/.test(testo),anc:{chk:chk?chk.y:null,vt:vl?vl.y:null}};
 }
 async function leggiPdf(file){
   if(!window.pdfjsLib)throw new Error("lettore PDF non caricato");
   pdfjsLib.GlobalWorkerOptions.workerSrc="lib/pdf.worker.min.js";
   const doc=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
   const pg=await doc.getPage(1);const c=await pg.getTextContent();
-  return leggiScheda(c.items.map(i=>({s:i.str,x:i.transform[4],y:i.transform[5]})));
+  return leggiScheda(c.items.map(i=>({s:i.str,x:i.transform[4],y:i.transform[5],w:i.width||0})));
 }
 
 
@@ -149,20 +155,28 @@ function bloccaSeManca(p){if(!mancaPresenti(p))return false;toast("Indica prima 
 const statoPratica=p=>p.mancanti.some(m=>!m.fatto)?"sospesa":"in lavorazione";
 
 /* ---------- foto: riduzione sotto i 250 KB ---------- */
+let TELA=null;
+/* apre la foto: prima il metodo veloce, se il telefono non lo regge quello classico */
+async function apriImmagine(file){
+  try{const b=await createImageBitmap(file,{imageOrientation:"from-image"});return{img:b,w:b.width,h:b.height,chiudi:()=>{try{b.close()}catch(e){}}}}catch(e){}
+  const url=URL.createObjectURL(file);
+  try{const img=new Image();img.src=url;await img.decode();return{img,w:img.naturalWidth,h:img.naturalHeight,chiudi:()=>URL.revokeObjectURL(url)}}
+  catch(e){URL.revokeObjectURL(url);throw new Error("foto non leggibile")}}
 async function riduci(file){
-  let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:"from-image"})}catch(e){bmp=await createImageBitmap(file)}
-  let lato=2048,q=.84,blob=null;
-  for(let giro=0;giro<14;giro++){
-    const k=Math.min(1,lato/Math.max(bmp.width,bmp.height));
-    const w=Math.round(bmp.width*k),h=Math.round(bmp.height*k);
-    const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(bmp,0,0,w,h);
-    blob=await new Promise(r=>cv.toBlob(r,"image/jpeg",q));
-    if(blob&&blob.size<=MAXKB*1024)break;
-    if(q>.56)q-=.08;else{lato=Math.round(lato*.82);q=.8}
-  }
-  bmp.close&&bmp.close();return blob;
-}
-async function dataScatto(file){try{if(window.exifr){const e=await exifr.parse(file,["DateTimeOriginal"]);if(e&&e.DateTimeOriginal)return +new Date(e.DateTimeOriginal)}}catch(e){}return file.lastModified||Date.now()}
+  const im=await apriImmagine(file);
+  if(!TELA)TELA=document.createElement("canvas");
+  try{let lato=1920,q=.82,blob=null;
+    for(let giro=0;giro<12;giro++){
+      const k=Math.min(1,lato/Math.max(im.w,im.h)),w=Math.max(1,Math.round(im.w*k)),h=Math.max(1,Math.round(im.h*k));
+      TELA.width=w;TELA.height=h;const ctx=TELA.getContext("2d");if(!ctx)throw new Error("memoria del telefono piena");
+      ctx.drawImage(im.img,0,0,w,h);
+      blob=await new Promise(r=>TELA.toBlob(r,"image/jpeg",q));
+      if(blob&&blob.size<=MAXKB*1024)break;
+      if(q>.6)q-=.08;else{lato=Math.round(lato*.85);q=.78}}
+    if(!blob)throw new Error("riduzione non riuscita");
+    return blob}
+  finally{im.chiudi();TELA.width=1;TELA.height=1}}
+async function dataScatto(file){try{if(window.exifr){const e=await exifr.parse(file,["DateTimeOriginal","CreateDate","DateTime"]);const d=e&&(e.DateTimeOriginal||e.CreateDate||e.DateTime);if(d&&!isNaN(+new Date(d)))return +new Date(d)}}catch(e){}return file.lastModified||Date.now()}
 
 
 /* ---------- scheda compilata sul modello vuoto (coordinate in punti, origine in alto a sinistra) ---------- */
@@ -579,14 +593,19 @@ async function disegnaFoto(p){
     await togliFotoLocale(f.id);programmaSync(1500);disegnaFoto(p)});
 }
 async function caricaFoto(p,files){
-  if(!files.length)return;caricando=true;$("#avanz").hidden=false;let ok=0,ko=0;
+  if(!files.length)return;caricando=true;$("#avanz").hidden=false;let ok=0,ko=0,motivo="";
   for(let i=0;i<files.length;i++){
     $("#avanzT").textContent=`Riduco la foto ${i+1} di ${files.length}…`;$("#avanzB").style.width=(i/files.length*100)+"%";
-    try{const quando=await dataScatto(files[i]);const blob=await riduci(files[i]);if(!blob)throw 0;
-      await salvaFoto({id:uuid(),pid:p.id,quando,blob,caricata:false});ok++}catch(e){ko++}
+    let fatto=false;
+    for(let tentativo=0;tentativo<2&&!fatto;tentativo++){
+      try{const quando=(await dataScatto(files[i]))+i;const blob=await riduci(files[i]);
+        await salvaFoto({id:uuid(),pid:p.id,quando,blob,caricata:false});ok++;fatto=true}
+      catch(e){console.warn("foto",i+1,e);motivo=(e&&e.message)||String(e);await new Promise(r=>setTimeout(r,400))}}
+    if(!fatto)ko++;
+    await new Promise(r=>setTimeout(r,30));
   }
   $("#avanzB").style.width="100%";$("#avanz").hidden=true;caricando=false;
-  toast(ko?`${ok} foto aggiunte, ${ko} non lette (formato non supportato?)`:`${ok} foto aggiunte`);
+  toast(ko?`${ok} foto aggiunte, ${ko} non riuscite (${motivo}). Riprova a selezionare quelle mancanti.`:`${ok} foto aggiunte`,ko?6000:2800);
   if(corrente&&corrente.id===p.id)disegnaFoto(p);programmaSync(800);
 }
 async function scaricaDaArchivio(path){const {data,error}=await sb.storage.from(BUCKET).download(path);if(error)throw error;return data}
