@@ -93,6 +93,22 @@ function ricomponi(arr){const rows=[];[...arr].sort((a,b)=>b.y-a.y||a.x-b.x).for
 /* codice perizia.ABI: tollera spazi o virgola al posto del punto e numeri attaccati davanti (es. il telefono) */
 function trovaNumero(testi){for(const t of testi){const re=/(\d{6,})\s*[.,]\s*(\d{5})(?!\d)/g;let m;
   while((m=re.exec(t))){const a=m[1].length>9?m[1].slice(-9):m[1];return a+"."+m[2]}}return""}
+/* documenti mancanti: dopo «manca/mancano», «per chiedere», «chiesto», «in attesa di», «sollecitato»…
+   prende le sigle in MAIUSCOLO separate da virgole, «e», «+», «;», «/» e si ferma alla prima parola minuscola */
+const SPIA_MANCANTI=/(?:\bmanca(?:no|nte|nti)?\b|\b(?:per|da)\s+(?:ri)?chiedere\b|\b(?:ri)?chiest[oaie]\b|\bin\s+attesa\s+d[ie]l?\b|\bsollecitat[oaie]\b|\battend(?:o|iamo|ere)\b)\s*:?/gi;
+function trovaMancanti(testo){const righe=testo.split("\n"),mancanti=[],fonti=[];
+  righe.forEach((riga,n)=>{SPIA_MANCANTI.lastIndex=0;let m;
+    while((m=SPIA_MANCANTI.exec(riga))){
+      if(!/[a-z]/.test(m[0])&&!/^\s*MANCA/i.test(m[0]))continue; // etichette del modulo in maiuscolo (MUTUO RICHIESTO, DOCUMENTI RICHIESTI…)
+      const dopo=(riga.slice(m.index+m[0].length)+" "+(righe[n+1]||"")).replace(/\s+/g," ");
+      const trovati=[];let stop=false;
+      for(const pezzo of dopo.split(/,|\+|;|\/|\s+e\s+|\s+ed\s+/i)){if(stop)break;
+        const parole=pezzo.trim().replace(/[.:]+$/,"").split(/\s+/).filter(Boolean),prese=[];
+        for(const w of parole){if(/[a-zà-ÿ]/.test(w)){stop=true;break}if(/[A-Z0-9]/.test(w))prese.push(w)}
+        if(prese.length)trovati.push(prese.join(" ").replace(/[.,]+$/,""));}
+      const nuovi=trovati.filter(t=>!/^\d+$/.test(t)&&!mancanti.includes(t));
+      if(nuovi.length){mancanti.push(...nuovi);fonti.push(riga.trim())}}});
+  return{mancanti,fonti}}
 function leggiScheda(items){
   const it=items.map(i=>({s:String(i.s).replace(/[\u200b-\u200d\ufeff]/g,"").replace(/\u00a0/g," "),x:i.x,y:i.y,w:i.w||0})).filter(i=>i.s.trim()).map(i=>({...i,s:i.s.trim()}));
   const find=re=>it.find(i=>re.test(i.s));
@@ -108,12 +124,9 @@ function leggiScheda(items){
   const vt=(sotto(vl,130,30).map(i=>i.s).find(s=>/\d/.test(s))||"").replace(/[^\d.,]/g,"");
   const righe=[];[...it].sort((a,b)=>b.y-a.y||a.x-b.x).forEach(i=>{const r=righe.find(r=>Math.abs(r.y-i.y)<3);r?r.p.push(i):righe.push({y:i.y,p:[i]})});
   const testo=righe.map(r=>r.p.sort((a,b)=>a.x-b.x).map(i=>i.s).join(" ")).join("\n");
-  const mancanti=[];
-  for(const m of testo.matchAll(/manca(?:no|nte|nti)?\s*:?\s*([^\n]+)/gi)){
-    m[1].split(/,|\+|;|\/|\be\b/).map(s=>s.trim().replace(/[.\s]+$/,"")).filter(s=>s&&s===s.toUpperCase()&&/[A-Z]/.test(s)).forEach(s=>{if(!mancanti.includes(s))mancanti.push(s)});
-  }
+  const {mancanti,fonti}=trovaMancanti(testo);
   const chk=find(/^CHECK LIST/);
-  return {num,richiedente:righeBox.find(r=>/[A-Za-zÀ-ÿ]{2}/.test(r))||"",indirizzo:indir,data,vt,mancanti,planCat:/PLAN\.?\s*CAT/.test(testo),anc:{chk:chk?chk.y:null,vt:vl?vl.y:null}};
+  return {num,richiedente:righeBox.find(r=>/[A-Za-zÀ-ÿ]{2}/.test(r))||"",indirizzo:indir,data,vt,mancanti,planCat:/PLAN\.?\s*CAT/.test(testo)||mancanti.some(m=>/PLAN/.test(m)),fontiMancanti:fonti,anc:{chk:chk?chk.y:null,vt:vl?vl.y:null}};
 }
 async function leggiPdf(file){
   if(!window.pdfjsLib)throw new Error("lettore PDF non caricato");
@@ -441,6 +454,7 @@ function vistaConferma(d){
     <label class="f">Richiedente<input type="text" id="cRich" value="${esc(d.richiedente)}"></label>
     <label class="f">Indirizzo<input type="text" id="cInd" value="${esc(d.indirizzo)}"></label>
     <label class="f">Documenti mancanti (separati da virgola)<input type="text" id="cMan" value="${esc(mm)}" placeholder="PLAN CAT, APE"></label>
+    ${d.file?((d.fontiMancanti||[]).length?`<p class="small muted">Presi da: ${d.fontiMancanti.map(f=>"«"+esc(f.length>140?"…"+f.slice(-140):f)+"»").join(" ")}</p>`:`<p class="small muted">Nelle note non ho trovato documenti mancanti: se ce ne sono, scrivili qui.</p>`):""}
     ${L.sempre.length?`<p class="small muted">Si aggiungono sempre: ${esc(L.sempre.join(", "))}.</p>`:""}
     <label class="chk"><input type="checkbox" id="cPlan" ${d.planCat?"checked":""}><span>Manca la planimetria catastale (servirà lo schizzo)</span></label>
     <p class="small">Cartella: <span class="mono" id="cCart"></span></p>
