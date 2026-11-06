@@ -9,8 +9,18 @@ const BUCKET="sopralluoghi";
 const LIMITE=(Number(CFG.LIMITE_GB)||1)*1024*1024*1024;
 const GIORNI_PROMEMORIA=Number(CFG.GIORNI_PROMEMORIA)||2;
 const ERA_RECUPERO=/type=recovery/.test(location.hash);
-const configOk=!!(CFG.SUPABASE_URL&&CFG.SUPABASE_KEY&&!/INCOLLA/.test(CFG.SUPABASE_URL+CFG.SUPABASE_KEY));
-const sb=(configOk&&window.supabase)?supabase.createClient(CFG.SUPABASE_URL.trim(),CFG.SUPABASE_KEY.trim(),{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
+/* ripulisco i valori incollati: spazi, virgolette, pezzi in più dopo l'indirizzo del progetto */
+const URL_SB=String(CFG.SUPABASE_URL||"").trim().replace(/^["'\s]+|["'\s]+$/g,"").replace(/\/(rest|auth|storage)\/v1.*$/,"").replace(/\/+$/,"");
+const KEY_SB=String(CFG.SUPABASE_KEY||"").replace(/\s+/g,"").replace(/^["']+|["']+$/g,"");
+function problemaConfig(){
+  if(!URL_SB||!KEY_SB||/INCOLLA/.test(URL_SB+KEY_SB))return"vuota";
+  if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(URL_SB))return`L'indirizzo in config.js non sembra quello di un progetto Supabase (dovrebbe essere tipo https://abcdefgh.supabase.co). Adesso c'è: ${URL_SB}`;
+  if(/^sb_secret_/.test(KEY_SB))return"In config.js hai incollato la chiave segreta (sb_secret_…). Va tolta subito e sostituita con la Publishable key (sb_publishable_…).";
+  if(!/^sb_publishable_/.test(KEY_SB)&&!/^eyJ/.test(KEY_SB))return"La chiave in config.js non sembra giusta: deve cominciare con sb_publishable_ (oppure con eyJ se è la vecchia chiave anon).";
+  return"";}
+const PROBLEMA_CONFIG=problemaConfig();
+const configOk=!PROBLEMA_CONFIG;
+const sb=(configOk&&window.supabase)?supabase.createClient(URL_SB,KEY_SB,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 let UTENTE=null;
 
 /* ---------- elenchi ---------- */
@@ -293,9 +303,16 @@ function pulisciUrl(){urls.forEach(u=>URL.revokeObjectURL(u));urls=[]}
 function mostra(titolo,indietro){$("#titolo").textContent=titolo;$("#btnIndietro").hidden=!indietro;window.scrollTo(0,0)}
 const daCancellare=p=>p.scaricata&&Date.now()-p.scaricata>GIORNI_PROMEMORIA*864e5;
 
+function erroreAccesso(e){const m=(e&&e.message)||String(e);
+  if(/invalid login credentials/i.test(m))return"Email o password sbagliate (Supabase ha risposto: l'utente non esiste con questa email oppure la password non corrisponde).";
+  if(/email not confirmed/i.test(m))return"L'utente esiste ma non è confermato. Su Supabase: Authentication → Users, eliminalo e ricrealo con «Auto Confirm User» spuntato.";
+  if(/invalid api key|no api key|apikey/i.test(m))return"Supabase non accetta la chiave scritta in config.js: ricopia la Publishable key (passi 6 e 9).";
+  if(/secret/i.test(m))return"In config.js c'è la chiave segreta: va sostituita con la Publishable key.";
+  if(/invalid path|not found|404/i.test(m))return"L'indirizzo del progetto in config.js non è giusto: deve essere solo https://xxxx.supabase.co.";
+  return"Accesso non riuscito. Messaggio di Supabase: "+m}
 function vistaConfig(){vistaAttuale="config";mostra("Sopralluoghi",false);
   $("#app").innerHTML=`<section class="box"><h2>Manca la configurazione</h2>
-  <p>Il sito non sa ancora a quale Supabase collegarsi. Apri il file <span class="mono">config.js</span> su GitHub e incolla l'indirizzo del progetto e la chiave pubblicabile, come spiegato nella guida.</p></section>`}
+  <p>${PROBLEMA_CONFIG&&PROBLEMA_CONFIG!=="vuota"?esc(PROBLEMA_CONFIG):"Il sito non sa ancora a quale Supabase collegarsi. Apri il file <span class=\"mono\">config.js</span> su GitHub e incolla l'indirizzo del progetto e la chiave pubblicabile, come spiegato nella guida."}</p></section>`}
 
 function vistaLogin(msg){vistaAttuale="login";mostra("Sopralluoghi",false);$("#chi").textContent="";disegnaStato();
   $("#app").innerHTML=`<section class="box"><h2>Accedi</h2>
@@ -305,13 +322,14 @@ function vistaLogin(msg){vistaAttuale="login";mostra("Sopralluoghi",false);$("#c
       <button class="primary" type="submit" id="lEntra">Entra</button>
     </form>
     <button type="button" class="link" id="lDim">Password dimenticata?</button>
-    <p class="small" id="lMsg">${esc(msg||"")}</p></section>`;
+    <p class="small" id="lMsg">${esc(msg||"")}</p>
+    <p class="small muted">Progetto: <span class="mono">${esc(URL_SB.replace("https://",""))}</span> · chiave <span class="mono">${esc(KEY_SB.slice(0,18))}…</span></p></section>`;
   $("#fLogin").onsubmit=async e=>{e.preventDefault();const em=$("#lEmail").value.trim(),pw=$("#lPw").value;
     if(!em||!pw){$("#lMsg").textContent="Scrivi email e password.";return}
     if(!navigator.onLine){$("#lMsg").textContent="Per il primo accesso serve la rete.";return}
     $("#lEntra").disabled=true;$("#lMsg").textContent="Accesso in corso…";
     const {data,error}=await sb.auth.signInWithPassword({email:em,password:pw});$("#lEntra").disabled=false;
-    if(error){$("#lMsg").textContent=/invalid/i.test(error.message)?"Email o password sbagliate.":"Accesso non riuscito: "+messaggioErrore(error);return}
+    if(error){$("#lMsg").textContent=erroreAccesso(error);return}
     entra(data.user)};
   $("#lDim").onclick=async()=>{const em=$("#lEmail").value.trim();if(!em){$("#lMsg").textContent="Scrivi prima la tua email, poi tocca di nuovo «Password dimenticata?».";return}
     const {error}=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname});
