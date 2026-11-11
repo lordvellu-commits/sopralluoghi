@@ -1,6 +1,6 @@
 /* Fa aprire il sito anche senza rete: tiene una copia dei suoi file.
    Quando si aggiorna il sito, alzare il numero di VERSIONE. */
-const VERSIONE = "sopralluoghi-v4";
+const VERSIONE = "sopralluoghi-v5";
 const FILE = ["./", "index.html", "app.js", "config.js", "manifest.webmanifest", "modello-scheda.pdf",
   "icona-192.png", "icona-512.png", "lib/supabase.js", "lib/pdf.min.js", "lib/pdf.worker.min.js",
   "lib/pdf-lib.min.js", "lib/jszip.min.js", "lib/exifr.js"];
