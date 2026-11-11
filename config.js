@@ -1,19 +1,30 @@
-/* =====================================================================
-   CONFIGURAZIONE - l'unico file da modificare.
-   Incolla tra le virgolette i due valori che trovi su Supabase
-   (la guida spiega dove). Non cancellare virgolette e virgole.
-   ===================================================================== */
-window.CONFIG = {
-  // Indirizzo del progetto, tipo https://abcdefghijklm.supabase.co
-  SUPABASE_URL: "https://anpxyiulxnvegsfosund.supabase.co/rest/v1/",
+/* Fa aprire il sito anche senza rete: tiene una copia dei suoi file.
+   Quando si aggiorna il sito, alzare il numero di VERSIONE. */
+const VERSIONE = "sopralluoghi-v5";
+const FILE = ["./", "index.html", "app.js", "config.js", "manifest.webmanifest", "modello-scheda.pdf",
+  "icona-192.png", "icona-512.png", "lib/supabase.js", "lib/pdf.min.js", "lib/pdf.worker.min.js",
+  "lib/pdf-lib.min.js", "lib/jszip.min.js", "lib/exifr.js"];
 
-  // Chiave pubblicabile, comincia con sb_publishable_
-  // (se il progetto ti mostra solo la chiave "anon", va bene anche quella)
-  SUPABASE_KEY: "sb_publishable_gA-dS9gJ69thnrk6IKB2Fg_ishAr4z4",
-
-  // Spazio del piano gratuito, in GB (serve per la barra "Spazio usato")
-  LIMITE_GB: 1,
-
-  // Dopo quanti giorni dallo scarico una pratica viene segnata "da cancellare"
-  GIORNI_PROMEMORIA: 2
-};
+self.addEventListener("install", e => {
+  e.waitUntil(caches.open(VERSIONE).then(c => c.addAll(FILE)).then(() => self.skipWaiting()));
+});
+self.addEventListener("activate", e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSIONE).map(k => caches.delete(k))))
+    .then(() => self.clients.claim()));
+});
+self.addEventListener("fetch", e => {
+  const req = e.request, url = new URL(req.url);
+  if (req.method !== "GET" || url.origin !== self.location.origin) return; // Supabase e il resto passano diretti
+  const fisso = /\/lib\/|icona-|modello-scheda\.pdf/.test(url.pathname);
+  if (fisso) {
+    e.respondWith(caches.match(req).then(r => r || fetch(req).then(res => {
+      const copia = res.clone(); caches.open(VERSIONE).then(c => c.put(req, copia)); return res;
+    })));
+    return;
+  }
+  // pagina, app e configurazione: prima la rete (così gli aggiornamenti arrivano), senza rete la copia
+  e.respondWith(fetch(req).then(res => {
+    if (res.ok) { const copia = res.clone(); caches.open(VERSIONE).then(c => c.put(req, copia)); }
+    return res;
+  }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || (req.mode === "navigate" ? caches.match("index.html") : undefined))));
+});
