@@ -147,13 +147,14 @@ function nuovaPratica(d){const ora=Date.now();return{id:uuid(),creata:ora,aggior
   mancanti:[...(d.mancanti||[]).filter(m=>!L.sempre.includes(m)),...L.sempre].map(n=>({nome:n,fatto:false}))}}
 
 /* ---------- frase per il database ---------- */
+const giornoMese=d=>String(d||"").trim().replace(/^(\d{1,2}[\/.-]\d{1,2})[\/.-]\d{2,4}$/,"$1");
 function frase(p){
   const c=p.campi;const low=s=>(s||"").toLowerCase();
   const tipo=c.tipo==="Altro"?c.tipoAltro:c.tipo;
   const pezzi=[];
   const pr=(c.presenti||[]).map(low);
   const prT=pr.length>1?pr.slice(0,-1).join(", ")+" e "+pr[pr.length-1]:pr[0];
-  pezzi.push(`${p.data||"[data]"} sopralluogo effettuato con ${prT||"[chi era presente]"}`);
+  pezzi.push(`${giornoMese(p.data)||"[data]"} sopralluogo effettuato con ${prT||"[chi era presente]"}`);
   const imm=[low(tipo)||"[tipo immobile]",low(c.stato)||"[stato]",low(c.manInt)||"[st. manutentivo interno]"].join(" ");
   pezzi.push(`${imm} in fabbricato ${low(c.manEst)||"[st. manutentivo esterno]"}`);
   const v=euro(c.vt); if(v)pezzi.push(`compravendita a ${v}`);
@@ -284,7 +285,7 @@ async function inviaFoto(){
   for(const f of tutte){i++;const p=await getPratica(f.pid);if(!p||!p.inviata)continue;
     STATO.avanz=`Invio foto ${i} di ${tutte.length}…`;disegnaStato();
     const {error}=await sb.storage.from(BUCKET).upload(percorsoFoto(f),f.blob,{upsert:true,contentType:"image/jpeg"});if(error)throw error;
-    const {error:e2}=await sb.from("foto").upsert({id:f.id,pratica:f.pid,quando:new Date(f.quando||Date.now()).toISOString(),byte:f.blob.size});if(e2)throw e2;
+    const {error:e2}=await sb.from("foto").upsert({id:f.id,pratica:f.pid,quando:new Date(f.quando||Date.now()).toISOString(),byte:f.blob.size,tipo:f.tipo||"immobile"});if(e2)throw e2;
     f.caricata=true;await salvaFoto(f)}}
 async function inviaElenchi(){if(!leggiCache("elenchiDaInviare",false))return;
   const {error}=await sb.from("profili").update({elenchi:L}).eq("id",UTENTE.id);if(error)throw error;scriviCache("elenchiDaInviare",false)}
@@ -297,9 +298,9 @@ async function ricevi(){
     if(!l||t>(l.aggiornata||0)){const nuova={...(l||{}),...(r.dati||{}),id:r.id,num:r.num||"",richiedente:r.richiedente||"",aggiornata:t,daInviare:false,inviata:true,scheda:l?l.scheda||null:null};
       if(l&&inMemoria(r.id))Object.assign(l,nuova);await salvaPratica(l&&inMemoria(r.id)?l:nuova)}}
   for(const l of locali.values())if(!remoti.has(l.id)&&l.inviata&&!l.daInviare&&!inMemoria(l.id))await eliminaLocale(l.id);
-  const fr=await tutteLeRighe("foto","id,pratica,quando,byte");
+  const fr=await tutteLeRighe("foto","id,pratica,quando,byte,tipo");
   const lf=new Map((await tutteFoto()).map(f=>[f.id,f])),rs=new Set();
-  for(const r of fr){rs.add(r.id);if(!lf.has(r.id))await salvaFoto({id:r.id,pid:r.pratica,quando:Date.parse(r.quando)||0,blob:null,caricata:true,byte:r.byte||0})}
+  for(const r of fr){rs.add(r.id);if(!lf.has(r.id))await salvaFoto({id:r.id,pid:r.pratica,quando:Date.parse(r.quando)||0,blob:null,caricata:true,byte:r.byte||0,tipo:r.tipo||"immobile"})}
   for(const f of lf.values())if(f.caricata&&!rs.has(f.id))await togliFotoLocale(f.id);
   const {data:prof}=await sb.from("profili").select("elenchi,deve_cambiare_password").eq("id",UTENTE.id).maybeSingle();
   if(prof){scriviCache("profilo",prof);if(prof.elenchi&&!leggiCache("elenchiDaInviare",false)){applicaElenchi(prof.elenchi);scriviCache("elenchi",L)}}
@@ -519,6 +520,12 @@ async function vistaPratica(p){
     <p class="small muted">Spunta quando arrivano o sono fatti. Con anche uno solo aperto la pratica resta sospesa.</p>
     <div id="docs"></div>
     <div class="row"><input type="text" id="nuovoDoc" class="grow" placeholder="Aggiungi documento"><button id="btnDoc">Aggiungi</button></div>
+    <h3>Foto dei documenti</h3>
+    <p class="small muted">Il modulo con i documenti da consegnare e gli eventuali documenti originali visti al sopralluogo. Stessa riduzione delle foto dell'immobile; nello ZIP vanno in una cartella a parte.</p>
+    <label class="btn">Aggiungi foto dei documenti<input type="file" id="inFotoDoc" accept="image/*" multiple></label>
+    <div id="avanzDoc" hidden><div class="small muted" id="avanzDocT"></div><div class="bar"><i id="avanzDocB"></i></div></div>
+    <div class="small muted" id="fotoDocInfo"></div>
+    <div class="fotos" id="fotosDoc"></div>
   </section>
 
   <section class="box">
@@ -545,7 +552,7 @@ async function vistaPratica(p){
 
   <section class="box">
     <h3>Scarica e chiudi</h3>
-    <p class="small muted">Lo ZIP contiene la cartella <span class="mono">${esc(cartella(p))}</span> con foto, scheda compilata${p.scheda||p.haScheda?" (sulla scheda originale)":" (sul modello vuoto)"}, frase, appunti${conSchizzo(p)?" e schizzo del rilievo":""}.</p>
+    <p class="small muted">Lo ZIP <span class="mono">${esc(cartella(p))}.zip</span> si estrae direttamente nella cartella dove lo metti, con foto dell'immobile, foto dei documenti, scheda compilata${p.scheda||p.haScheda?" (sulla scheda originale)":" (sul modello vuoto)"}, frase, appunti${conSchizzo(p)?" e schizzo del rilievo":""}.</p>
     <button class="primary" id="btnZip">Scarica ZIP</button>
     <p class="small" id="zipInfo">${p.scaricata?"Scaricata il "+new Date(p.scaricata).toLocaleString("it-IT"):"Non ancora scaricata."}</p>
     <div class="row"><button class="danger" id="btnElimina">Elimina pratica</button></div>
@@ -577,7 +584,8 @@ async function vistaPratica(p){
   $("#btnDoc").onclick=()=>{const v=$("#nuovoDoc").value.trim().toUpperCase();if(!v)return;p.mancanti.push({nome:v,fatto:false});$("#nuovoDoc").value="";disegnaDocs();agg()};
   $("#btnCopia").onclick=async()=>{if(bloccaSeManca(p))return;const t=frase(p);try{await navigator.clipboard.writeText(t);toast("Frase copiata")}
     catch(e){const r=document.createRange();r.selectNodeContents($("#frase"));const s=getSelection();s.removeAllRanges();s.addRange(r);toast("Frase selezionata: copiala dal menu")}};
-  $("#inFoto").onchange=e=>caricaFoto(p,[...e.target.files]).then(()=>{e.target.value=""});
+  $("#inFoto").onchange=e=>caricaFoto(p,[...e.target.files],"immobile").then(()=>{e.target.value=""});
+  $("#inFotoDoc").onchange=e=>caricaFoto(p,[...e.target.files],"doc").then(()=>{e.target.value=""});
   $("#btnZip").onclick=()=>scarica(p);
   $("#btnSchizzo").onclick=()=>apriSchizzo(p);
   $("#btnElimina").onclick=()=>{$("#confElimina").hidden=false;$("#btnElimina").hidden=true};
@@ -595,41 +603,48 @@ const urlFirmati=new Map();
 async function urlFoto(fs){const servono=fs.filter(f=>!f.blob&&!(urlFirmati.get(f.id)&&urlFirmati.get(f.id).scad>Date.now()));
   if(servono.length&&navigator.onLine){try{const {data}=await sb.storage.from(BUCKET).createSignedUrls(servono.map(percorsoFoto),3600);
     (data||[]).forEach((d,i)=>{if(d&&d.signedUrl)urlFirmati.set(servono[i].id,{url:d.signedUrl,scad:Date.now()+3300e3})})}catch(e){}}}
+const tipoFoto=f=>f.tipo==="doc"?"doc":"immobile";
+const SEZ={immobile:{info:"#fotoInfo",griglia:"#fotos",avanz:"#avanz",T:"#avanzT",B:"#avanzB",nome:"Foto"},
+           doc:{info:"#fotoDocInfo",griglia:"#fotosDoc",avanz:"#avanzDoc",T:"#avanzDocT",B:"#avanzDocB",nome:"Documento"}};
 async function disegnaFoto(p){
-  const fs=(await fotoDi(p.id)).sort((a,b)=>a.quando-b.quando);await urlFoto(fs);
+  const tutte=(await fotoDi(p.id)).sort((a,b)=>a.quando-b.quando);await urlFoto(tutte);
   if(!corrente||corrente.id!==p.id||vistaAttuale!=="pratica")return;pulisciUrl();
-  const kb=fs.reduce((s,f)=>s+(f.blob?f.blob.size:f.byte||0),0)/1024,nonInv=fs.filter(f=>!f.caricata).length;
-  $("#fotoInfo").textContent=fs.length?`${fs.length} foto · ${Math.round(kb)} KB in tutto${nonInv?` · ${nonInv} ancora da inviare`:" · tutte inviate"}`:"Nessuna foto ancora.";
-  $("#fotos").innerHTML=fs.map((f,i)=>{let src="";if(f.blob){src=URL.createObjectURL(f.blob);urls.push(src)}else if(urlFirmati.get(f.id))src=urlFirmati.get(f.id).url;
-    return`<figure>${src?`<img src="${src}" alt="Foto ${i+1}" loading="lazy">`:`<div class="ph small muted">serve la rete</div>`}<button data-togli="${f.id}" aria-label="Togli foto ${i+1}">✕</button><figcaption>${Math.round((f.blob?f.blob.size:f.byte||0)/1024)} KB${f.caricata?"":" · da inviare"}</figcaption></figure>`}).join("");
-  document.querySelectorAll("[data-togli]").forEach(b=>b.onclick=async()=>{const f=fs.find(x=>x.id===b.dataset.togli);if(!f)return;
+  for(const tipo of ["immobile","doc"]){const z=SEZ[tipo],fs=tutte.filter(f=>tipoFoto(f)===tipo);
+    const kb=fs.reduce((s,f)=>s+(f.blob?f.blob.size:f.byte||0),0)/1024,nonInv=fs.filter(f=>!f.caricata).length;
+    $(z.info).textContent=fs.length?`${fs.length} foto · ${Math.round(kb)} KB in tutto${nonInv?` · ${nonInv} ancora da inviare`:" · tutte inviate"}`:"Nessuna foto ancora.";
+    $(z.griglia).innerHTML=fs.map((f,i)=>{let src="";if(f.blob){src=URL.createObjectURL(f.blob);urls.push(src)}else if(urlFirmati.get(f.id))src=urlFirmati.get(f.id).url;
+      return`<figure>${src?`<img src="${src}" alt="${z.nome} ${i+1}" loading="lazy">`:`<div class="ph small muted">serve la rete</div>`}<button data-togli="${f.id}" aria-label="Togli foto ${i+1}">✕</button><figcaption>${Math.round((f.blob?f.blob.size:f.byte||0)/1024)} KB${f.caricata?"":" · da inviare"}</figcaption></figure>`}).join("")}
+  document.querySelectorAll("[data-togli]").forEach(b=>b.onclick=async()=>{const f=tutte.find(x=>x.id===b.dataset.togli);if(!f)return;
     if(f.caricata){const coda=await codaEliminazioni();coda.push({tipo:"foto",id:f.id,path:percorsoFoto(f)});scriviCache("eliminazioni",coda)}
     await togliFotoLocale(f.id);programmaSync(1500);disegnaFoto(p)});
 }
-async function caricaFoto(p,files){
-  if(!files.length)return;caricando=true;$("#avanz").hidden=false;let ok=0,ko=0,motivo="";
+async function caricaFoto(p,files,tipo="immobile"){
+  const z=SEZ[tipo];
+  if(!files.length)return;caricando=true;$(z.avanz).hidden=false;let ok=0,ko=0,motivo="";
   for(let i=0;i<files.length;i++){
-    $("#avanzT").textContent=`Riduco la foto ${i+1} di ${files.length}…`;$("#avanzB").style.width=(i/files.length*100)+"%";
+    $(z.T).textContent=`Riduco la foto ${i+1} di ${files.length}…`;$(z.B).style.width=(i/files.length*100)+"%";
     let fatto=false;
     for(let tentativo=0;tentativo<2&&!fatto;tentativo++){
       try{const quando=(await dataScatto(files[i]))+i;const blob=await riduci(files[i]);
-        await salvaFoto({id:uuid(),pid:p.id,quando,blob,caricata:false});ok++;fatto=true}
+        await salvaFoto({id:uuid(),pid:p.id,quando,blob,caricata:false,tipo});ok++;fatto=true}
       catch(e){console.warn("foto",i+1,e);motivo=(e&&e.message)||String(e);await new Promise(r=>setTimeout(r,400))}}
     if(!fatto)ko++;
     await new Promise(r=>setTimeout(r,30));
   }
-  $("#avanzB").style.width="100%";$("#avanz").hidden=true;caricando=false;
-  toast(ko?`${ok} foto aggiunte, ${ko} non riuscite (${motivo}). Riprova a selezionare quelle mancanti.`:`${ok} foto aggiunte`,ko?6000:2800);
+  $(z.B).style.width="100%";$(z.avanz).hidden=true;caricando=false;
+  const cosa=tipo==="doc"?"foto dei documenti":"foto";
+  toast(ko?`${ok} ${cosa} aggiunte, ${ko} non riuscite (${motivo}). Riprova a selezionare quelle mancanti.`:`${ok} ${cosa} aggiunte`,ko?6000:2800);
   if(corrente&&corrente.id===p.id)disegnaFoto(p);programmaSync(800);
 }
 async function scaricaDaArchivio(path){const {data,error}=await sb.storage.from(BUCKET).download(path);if(error)throw error;return data}
 async function creaZip(p){
-  const z=new JSZip();const root=z.folder(cartella(p));
+  const z=new JSZip();const root=z; // niente cartella interna: si estrae direttamente dove sta lo ZIP
   const fs=(await fotoDi(p.id)).sort((a,b)=>a.quando-b.quando);
   const servono=fs.some(f=>!f.blob)||(!p.scheda&&p.haScheda);
   if(servono&&!navigator.onLine)throw new Error("Per scaricare le foto che non sono su questo dispositivo serve la rete");
-  for(let i=0;i<fs.length;i++){const f=fs[i];$("#btnZip").textContent=`Preparo lo ZIP… foto ${i+1} di ${fs.length}`;
-    root.file(`Foto al sopralluogo/foto_${String(i+1).padStart(3,"0")}.jpg`,f.blob||await scaricaDaArchivio(percorsoFoto(f)))}
+  const conta={immobile:0,doc:0};
+  for(let i=0;i<fs.length;i++){const f=fs[i],t=tipoFoto(f),n=String(++conta[t]).padStart(3,"0");$("#btnZip").textContent=`Preparo lo ZIP… foto ${i+1} di ${fs.length}`;
+    root.file(t==="doc"?`Documenti al sopralluogo/doc_${n}.jpg`:`Foto al sopralluogo/foto_${n}.jpg`,f.blob||await scaricaDaArchivio(percorsoFoto(f)))}
   const scheda=p.scheda||(p.haScheda?await scaricaDaArchivio(percorsoScheda(p)):null);
   root.file("Scheda_compilata.pdf",await schedaCompilata(p,scheda));
   root.file("Frase_database.txt",frase(p)+"\r\n");
